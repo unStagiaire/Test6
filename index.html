@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lycéopolis</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <style>
+    body { font-family: system-ui, sans-serif; }
+    .house { transition: all 0.3s; }
+    .house:hover { transform: scale(1.08); }
+  </style>
+</head>
+<body class="bg-zinc-950 text-white min-h-screen">
+
+<div id="app" class="max-w-6xl mx-auto p-4">
+
+  <!-- CONNEXION -->
+  <div id="login-screen" class="min-h-screen flex items-center justify-center">
+    <div class="bg-zinc-900 rounded-3xl p-8 w-full max-w-md">
+      <h1 class="text-4xl font-bold text-emerald-400 text-center mb-8">Lycéopolis</h1>
+      <div class="space-y-6">
+        <input id="pseudo" type="text" placeholder="Pseudo" class="w-full bg-zinc-800 rounded-2xl px-5 py-4 text-lg">
+        <input id="password" type="password" placeholder="Mot de passe" class="w-full bg-zinc-800 rounded-2xl px-5 py-4 text-lg">
+        <button onclick="login()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-2xl font-semibold">Se connecter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MENU PRINCIPAL -->
+  <div id="main-menu" class="hidden min-h-screen">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">Bienvenue, <span id="current-pseudo" class="text-emerald-400"></span></h1>
+      <button onclick="logout()" class="text-zinc-400 hover:text-white">Déconnexion</button>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <button onclick="showCreateParty()" class="bg-gradient-to-br from-emerald-600 to-teal-600 p-8 rounded-3xl text-left hover:scale-105 transition">
+        <h2 class="text-2xl font-bold">Créer une partie</h2>
+      </button>
+      <button onclick="showAvailableParties()" class="bg-zinc-800 p-8 rounded-3xl text-left hover:bg-zinc-700 transition">
+        <h2 class="text-2xl font-bold">Rejoindre une partie</h2>
+      </button>
+    </div>
+  </div>
+
+  <!-- LISTE DES PARTIES -->
+  <div id="parties-list-screen" class="hidden p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold">Parties disponibles</h2>
+      <button onclick="backToMainMenu()" class="text-zinc-400 hover:text-white">← Retour</button>
+    </div>
+    <div id="available-parties" class="space-y-4"></div>
+  </div>
+
+  <!-- LOBBY -->
+  <div id="lobby-screen" class="hidden p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold">Partie • <span id="party-id"></span></h2>
+      <div id="player-count" class="text-emerald-400 font-semibold"></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2">
+        <h3 class="font-bold mb-4">Joueurs connectés</h3>
+        <div id="players-in-lobby" class="grid grid-cols-2 gap-4"></div>
+      </div>
+
+      <div class="bg-zinc-900 rounded-3xl p-6">
+        <h3 class="text-xl font-bold mb-4">Choisis ton rôle</h3>
+        <div id="roles-list" class="grid grid-cols-1 gap-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JEU -->
+  <div id="game-screen" class="hidden p-6">
+    <h2 class="text-2xl font-bold mb-6">Fil d'actualités</h2>
+    <div id="my-role-display" class="mb-4 text-emerald-400 font-semibold"></div>
+    <div id="feed" class="space-y-6 mb-8"></div>
+
+    <div class="fixed bottom-0 left-0 right-0 bg-zinc-900 p-4 max-w-6xl mx-auto">
+      <textarea id="post-content" rows="3" class="w-full bg-zinc-800 rounded-2xl p-4" placeholder="Que voulez-vous publier ?"></textarea>
+      <div class="flex justify-end mt-3">
+        <button onclick="publishPost()" class="bg-emerald-600 px-8 py-3 rounded-2xl font-semibold">Publier</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== DONNÉES ====================
+let currentUser = null;
+let currentParty = null;
+let playersInParty = [];
+let selectedRole = null;
+let posts = [];
+let allParties = [];
+
+const roleSlots = {
+  "Candidat Honnête": { max: 8, current: 8, emoji: "🗳️" },
+  "Candidat Frauduleux": { max: 2, current: 2, emoji: "🕵️" },
+  "Journaliste": { max: 3, current: 3, emoji: "📰" },
+  "Citoyen": { max: 999, current: 999, emoji: "👤" }
+};
+
+// ==================== CONNEXION ====================
+function login() {
+  const pseudo = document.getElementById("pseudo").value.trim();
+  if (!pseudo) return alert("Veuillez entrer un pseudo");
+
+  currentUser = { pseudo: pseudo };
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("main-menu").classList.remove("hidden");
+  document.getElementById("current-pseudo").textContent = pseudo;
+}
+
+function logout() {
+  location.reload();
+}
+
+// ==================== PARTIES ====================
+function showCreateParty() {
+  const partyName = prompt("Nom de ta partie ?", "Partie de " + currentUser.pseudo);
+  if (!partyName) return;
+
+  currentParty = {
+    id: "PARTY-" + Math.floor(1000 + Math.random() * 9000),
+    name: partyName,
+    host: currentUser.pseudo,
+    players: [currentUser.pseudo]
+  };
+
+  allParties.push(currentParty);
+  joinParty();
+}
+
+function showAvailableParties() {
+  document.getElementById("main-menu").classList.add("hidden");
+  document.getElementById("parties-list-screen").classList.remove("hidden");
+  renderAvailableParties();
+}
+
+function renderAvailableParties() {
+  const container = document.getElementById("available-parties");
+  if (allParties.length === 0) {
+    container.innerHTML = `<p class="text-zinc-400 text-center py-12">Aucune partie disponible...</p>`;
+    return;
+  }
+
+  container.innerHTML = allParties.map(party => `
+    <div class="bg-zinc-900 rounded-3xl p-6 flex justify-between items-center">
+      <div>
+        <div class="font-bold">${party.name}</div>
+        <div class="text-zinc-400">Par ${party.host}</div>
+      </div>
+      <div>
+        <div class="text-emerald-400">${party.players.length}/60</div>
+        <button onclick="joinExistingParty('${party.id}')" class="mt-3 bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-2xl">Rejoindre</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function joinExistingParty(partyId) {
+  currentParty = allParties.find(p => p.id === partyId);
+  if (currentParty) joinParty();
+}
+
+function backToMainMenu() {
+  document.getElementById("parties-list-screen").classList.add("hidden");
+  document.getElementById("main-menu").classList.remove("hidden");
+}
+
+function joinParty() {
+  if (!currentParty.players.includes(currentUser.pseudo)) {
+    currentParty.players.push(currentUser.pseudo);
+  }
+
+  playersInParty = currentParty.players.map(p => ({ pseudo: p, role: null }));
+
+  document.getElementById("main-menu").classList.add("hidden");
+  document.getElementById("parties-list-screen").classList.add("hidden");
+  document.getElementById("lobby-screen").classList.remove("hidden");
+  document.getElementById("party-id").textContent = currentParty.name;
+
+  renderPlayersInLobby();
+  renderRoleSelection();
+}
+
+// ==================== LOBBY ====================
+function renderPlayersInLobby() {
+  const container = document.getElementById("players-in-lobby");
+  container.innerHTML = playersInParty.map(p => `
+    <div class="bg-zinc-800 rounded-2xl p-4">
+      <div class="font-semibold">${p.pseudo}</div>
+      <div class="text-sm \( {p.role ? 'text-emerald-400' : 'text-zinc-500'}"> \){p.role || "Rôle non choisi"}</div>
+    </div>
+  `).join('');
+}
+
+function renderRoleSelection() {
+  const container = document.getElementById("roles-list");
+  container.innerHTML = Object.keys(roleSlots).map(role => `
+    <button onclick="selectRole('${role}')" class="bg-zinc-800 hover:bg-zinc-700 p-4 rounded-2xl text-left w-full">
+      <div class="font-semibold">${role}</div>
+      <div class="text-xs text-zinc-400">Places : ${roleSlots[role].current}</div>
+    </button>
+  `).join('');
+}
+
+function selectRole(roleName) {
+  const slot = roleSlots[roleName];
+  if (slot.current <= 0 && slot.max !== 999) return alert("Ce rôle est complet !");
+
+  selectedRole = roleName;
+  const player = playersInParty.find(p => p.pseudo === currentUser.pseudo);
+  if (player) player.role = selectedRole;
+
+  renderPlayersInLobby();
+
+  document.getElementById("lobby-screen").classList.add("hidden");
+  document.getElementById("game-screen").classList.remove("hidden");
+  document.getElementById("my-role-display").textContent = `Rôle : ${selectedRole}`;
+}
+
+// ==================== FEED ====================
+function publishPost() {
+  const content = document.getElementById("post-content").value.trim();
+  if (!content) return;
+
+  posts.unshift({
+    pseudo: currentUser.pseudo,
+    role: selectedRole,
+    content: content,
+    time: "Maintenant"
+  });
+
+  renderFeed();
+  document.getElementById("post-content").value = '';
+}
+
+function renderFeed() {
+  const feed = document.getElementById("feed");
+  feed.innerHTML = posts.map(p => `
+    <div class="bg-zinc-900 rounded-3xl p-5">
+      <div class="flex justify-between mb-3">
+        <span class="font-bold">${p.pseudo}</span>
+        <span class="text-amber-400">(${p.role})</span>
+      </div>
+      <p>${p.content}</p>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+  </html>
